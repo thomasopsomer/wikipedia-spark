@@ -35,7 +35,7 @@ dockerfile in docker := {
   val artifactTargetPath = s"/home/wikipedia-spark/${artifact.name}"
   val log4jConfig: File = new File("log4j.properties")
   new Dockerfile {
-    from("pyspark3-alpine")
+    from("asgard/pyspark3-alpine")
     add(artifact, artifactTargetPath)
     env("JAR", artifactTargetPath)
     add(log4jConfig, "/usr/spark/conf/log4j.properties")
