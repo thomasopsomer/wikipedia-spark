@@ -40,6 +40,8 @@ object SparkApp {
     spark.sparkContext.hadoopConfiguration.set(XmlInputFormat.START_TAG_KEY, "<page>")
     spark.sparkContext.hadoopConfiguration.set(XmlInputFormat.END_TAG_KEY, "</page>")
     spark.sparkContext.hadoopConfiguration.set(XmlInputFormat.ENCODING_KEY, "utf-8")
+    spark.sparkContext.hadoopConfiguration.set("fs.s3a.connection.timeout", "500000")
+    spark.sparkContext.hadoopConfiguration.set("fs.s3a.connection.maximum", "100")
 
     // make a RDD of xml string, one article per line using databricks
     // xml spark reader

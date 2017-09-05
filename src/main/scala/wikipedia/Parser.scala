@@ -48,8 +48,8 @@ class Parser(lang:String = "en") extends Serializable {
 
     // fill our wiki article obj :)
     WikiArticle(
-      categories = mapLinks(a.getCategories),
-      externalLinks = mapLinks(a.getExternalLinks),
+      categories = mapLinks(Option(a.getCategories)),
+      externalLinks = mapLinks(Option(a.getExternalLinks)),
       highlights = a.getHighlights.asScala.toList,
       integerNamespace = ns,
       lang = a.getLang,
@@ -65,15 +65,19 @@ class Parser(lang:String = "en") extends Serializable {
   /*
    * Transform java list of Link to a scala list of WikiLink
    */
-  def mapLinks(list: util.List[Link]): List[WikiLink] = {
-    list.asScala.map( x => {
-      WikiLink(
-        anchor = x.getAnchor,
-        id = x.getCleanId,
-        start = x.getStart,
-        end = x.getEnd
-      )
-    }).toList
+  def mapLinks(list: Option[util.List[Link]]): List[WikiLink] = {
+    list match {
+      case Some(l) =>
+        l.asScala.map( x => {
+          WikiLink(
+            anchor = x.getAnchor,
+            id = x.getCleanId,
+            start = x.getStart,
+            end = x.getEnd
+          )
+        }).toList
+      case None => null
+    }
   }
 
   /*
@@ -84,21 +88,22 @@ class Parser(lang:String = "en") extends Serializable {
     var links = ArrayBuffer.empty[List[WikiLink]]
     var paragraphs = ArrayBuffer.empty[String]
 
-    for (x <- a.getParagraphsWithLinks.asScala) {
-      val para = Option(x.getParagraph)
-      para match {
-        case Some(p) =>
-          if (!p.trim.isEmpty) {
-            paragraphs += p.trim
-            links += mapLinks(x.getLinks)
+    Option(a.getParagraphsWithLinks) match {
+      case Some(paraWithLinks) =>
+        for (x <- paraWithLinks.asScala) {
+          val para = Option(x.getParagraph)
+          para match {
+            case Some(p) =>
+              if (!p.trim.isEmpty) {
+                paragraphs += p.trim
+                links += mapLinks(Option(x.getLinks))
+              }
+            case _ =>
           }
-        case _ =>
-      }
+        }
+        (paragraphs.toList, links.toList)
+      case None => (null, null)
     }
-    (paragraphs.toList, links.toList)
   }
-
-
-
 
 }
