@@ -8,6 +8,7 @@ import it.cnr.isti.hpc.wikipedia.parser.ArticleParser
 import scala.xml.XML
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
+import org.apache.log4j.LogManager
 
 
 /**
@@ -20,13 +21,15 @@ class MyArticle extends Article {
 
 /*
  * Mainly a wrapper around the json-wikipedia ArticleParser
- * Use their wrapper to fill a WikiArticle case class to be
+ * Use their parser to fill a WikiArticle case class to be
  * used in spark in a dataframe / dataset.
  */
 
 class Parser(lang:String = "en") extends Serializable {
 
-  lazy val textParser = new ArticleParser(lang)
+  @transient lazy val logger = LogManager.getLogger("SparkWikipediaParser.Parser")
+
+  private lazy val textParser = new ArticleParser(lang)
 
   /*
    * Parse a single xml as a string representing a wikipedia
@@ -35,13 +38,21 @@ class Parser(lang:String = "en") extends Serializable {
   def parse(xmlStr: String) = {
 
     val xml = XML.loadString(xmlStr)
-    val text = (xml \\ "revision" \\ "text").text
-    val a = new Article()
-    textParser.parse(a, text)
 
     // parse title and ns in xml
     val title = (xml \\ "title").text
     val ns = (xml \\ "ns").text.toInt
+    val text = (xml \\ "revision" \\ "text").text
+
+    // parse txt with json-wikipedia parser
+    val a = new Article()
+    a.setTitle(title)
+    try {
+      textParser.parse(a, text)
+    } catch {
+      case e: java.lang.StringIndexOutOfBoundsException =>
+        logger.warn(f"Got a StringIndexOutOfBoundsException on article $title")
+    }
 
     // jointly get paragraph and links
     val paralink = mapParagraphsLinks(a)

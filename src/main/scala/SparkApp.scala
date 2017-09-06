@@ -5,11 +5,14 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import wikipedia.{Parser, WikiArticle}
 import scopt.OptionParser
+import org.apache.log4j.LogManager
 
 /**
   * Created by thomasopsomer on 05/09/2017.
   */
 object SparkApp {
+
+  @transient lazy val logger = LogManager.getLogger("SparkWikipediaParser")
 
   case class Params(
                      inputPath: String = null,
@@ -24,7 +27,7 @@ object SparkApp {
     .setMaster("local[*]")
     .set("spark.driver.allowMultipleContexts", "true")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    .set("spark.sql.parquet.compression.codec", "gzip")
+    // .set("spark.sql.parquet.compression.codec", "gzip")
 
   lazy val spark = SparkSession
     .builder()
@@ -63,8 +66,8 @@ object SparkApp {
 
     // save as parquet or json
     params.outputFormat match {
-      case "parquet" => dumpDS.write.parquet(params.outputPath)
-      case "json" => dumpDS.write.json(params.outputPath)
+      case "parquet" => dumpDS.write.partitionBy("type").parquet(params.outputPath)
+      case "json" => dumpDS.write.partitionBy("type").json(params.outputPath)
       case _ => println("outputFormat needs to be parquet or json")
     }
   }

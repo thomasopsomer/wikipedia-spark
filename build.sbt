@@ -16,7 +16,8 @@ sparkComponents += "sql"
 
 libraryDependencies ++= Seq(
   "com.databricks" % "spark-xml_2.11" % "0.4.1",
-  "com.github.scopt" %% "scopt" % "3.4.0"
+  "com.github.scopt" %% "scopt" % "3.4.0",
+  "org.xerial.snappy" % "snappy-java" % "1.1.4"
   )
 
 unmanagedBase := baseDirectory.value / "lib"
