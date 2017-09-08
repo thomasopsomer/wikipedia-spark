@@ -10,6 +10,10 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import org.apache.log4j.LogManager
 
+// import info.bliki.wiki.dump.WikiArticle
+import it.cnr.isti.hpc.wikipedia.article.Article.Type
+
+
 
 /**
   * Created by thomasopsomer on 05/09/2017.
@@ -31,6 +35,25 @@ class Parser(lang:String = "en") extends Serializable {
 
   private lazy val textParser = new ArticleParser(lang)
 
+  // see https://en.wikipedia.org/wiki/Wikipedia:Namespace
+  val typeMap: Map[Int, String] = Map(
+    0 -> "Article",
+    2 -> "User",
+    4 -> "Project",
+    6 -> "File",
+    10 -> "Template",
+    12 -> "Help",
+    14 -> "Category",
+    100 -> "Portal",
+    108 -> "Book",
+    118 -> "Draft",
+    446 -> "Unknown",
+    710 -> "Unknown",
+    828 -> "Module",
+    2300 -> "Gadget",
+    2302 -> "Gadget"
+  )
+
   /*
    * Parse a single xml as a string representing a wikipedia
    * article from the dump
@@ -38,6 +61,7 @@ class Parser(lang:String = "en") extends Serializable {
   def parse(xmlStr: String) = {
 
     val xml = XML.loadString(xmlStr)
+
 
     // parse title and ns in xml
     val title = (xml \\ "title").text
@@ -47,6 +71,9 @@ class Parser(lang:String = "en") extends Serializable {
     // parse txt with json-wikipedia parser
     val a = new Article()
     a.setTitle(title)
+    a.setIntegerNamespace(ns)
+    a.setType(getType(ns))
+
     try {
       textParser.parse(a, text)
     } catch {
@@ -57,6 +84,22 @@ class Parser(lang:String = "en") extends Serializable {
     // jointly get paragraph and links
     val paralink = mapParagraphsLinks(a)
 
+    // check for wrong disambiguation which are instead Redirection
+    var finalType = getFinalTypeName(a)
+    val redirect = if (a.getRedirect == "") null else a.getRedirect
+    if (isWrongDisamb(paralink._2, finalType) && redirect != null) {
+      logger.info(
+        f"Setting 'Redirect' instead of 'Disambiguation' for article: $title because it has only one link")
+      finalType = "Redirect"
+    }
+
+    // check for article that are disambiguation
+    if (finalType == "Article" && articleIsDisamb(paralink._1)) {
+      logger.info(
+        f"Setting 'Redirect' Disambiguation of 'Article' for article: $title because of 'may refer to' parttern"))
+      finalType = "Disambiguation"
+    }
+
     // fill our wiki article obj :)
     WikiArticle(
       categories = mapLinks(Option(a.getCategories)),
@@ -66,11 +109,12 @@ class Parser(lang:String = "en") extends Serializable {
       lang = a.getLang,
       links = paralink._2,
       paragraphs = paralink._1,
-      redirect = if (a.getRedirect == "") null else a.getRedirect,
+      redirect = redirect,
       title = title,
       wikiTitle = title.replace(" ", "_"),
-      `type` = a.getTypeName
+      `type` = finalType
     )
+
   }
 
   /*
@@ -79,7 +123,7 @@ class Parser(lang:String = "en") extends Serializable {
   def mapLinks(list: Option[util.List[Link]]): List[WikiLink] = {
     list match {
       case Some(l) =>
-        l.asScala.map( x => {
+        l.asScala.map(x => {
           WikiLink(
             anchor = x.getAnchor,
             id = x.getCleanId,
@@ -106,7 +150,7 @@ class Parser(lang:String = "en") extends Serializable {
           para match {
             case Some(p) =>
               if (!p.trim.isEmpty) {
-                paragraphs += p.trim
+                paragraphs += p
                 links += mapLinks(Option(x.getLinks))
               }
             case _ =>
@@ -115,6 +159,56 @@ class Parser(lang:String = "en") extends Serializable {
         (paragraphs.toList, links.toList)
       case None => (null, null)
     }
+  }
+
+  def getType(ns: Int): Type = {
+    ns match {
+      case 0 => Type.ARTICLE
+      case 2 => Type.USER
+      case 4 => Type.PROJECT
+      case 6 => Type.FILE
+      case 10 => Type.TEMPLATE
+      case 12 => Type.HELP
+      case 13 => Type.HELPTALK
+      case 14 => Type.CATEGORY
+      case _ => Type.UNKNOWN
+    }
+  }
+
+  def getFinalTypeName(a: Article) = {
+    val t = a.getType
+    t match {
+      case Type.UNKNOWN => typeMap.getOrElse(a.getIntegerNamespace, "Unknown")
+      case Type.HELP => typeMap.getOrElse(a.getIntegerNamespace, "Unknown")
+      case _ => a.getTypeName
+    }
+  }
+
+  /*
+   * Check for wrong disambiguation page that are actually redirection
+   * based on number of links
+   */
+  def isWrongDisamb(links: List[List[WikiLink]], `type`: String) = {
+    Option(links) match {
+      case Some(l) =>
+        if (l.flatten.size == 1 & `type` == "Disambiguation") {
+          true
+        } else {
+          false
+        }
+      case _ => false
+    }
+  }
+
+  def articleIsDisamb(paragraphs: List[String], thresh: Int=110): Boolean = {
+    if (paragraphs != null) {
+      if (paragraphs.nonEmpty) {
+        if (paragraphs.head.contains("may refer to") && paragraphs.head.length() < thresh) {
+          return true
+        }
+      }
+    }
+    false
   }
 
 }
