@@ -96,7 +96,7 @@ class Parser(lang:String = "en") extends Serializable {
     // check for article that are disambiguation
     if (finalType == "Article" && articleIsDisamb(paralink._1)) {
       logger.info(
-        f"Setting 'Redirect' Disambiguation of 'Article' for article: $title because of 'may refer to' parttern"))
+        f"Setting 'Redirect' Disambiguation of 'Article' for article: $title because of 'may refer to' parttern")
       finalType = "Disambiguation"
     }
 
