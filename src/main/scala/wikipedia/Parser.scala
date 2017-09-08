@@ -67,7 +67,7 @@ class Parser(lang:String = "en", wikiTypes: Seq[String] = Seq()) extends Seriali
     val ns = (xml \\ "ns").text.toInt
     val text = (xml \\ "revision" \\ "text").text
 
-    if (wikiTypes.contains(typeMap.getOrElse(ns, "Unknown"))) {
+    if (wikiTypes.contains(typeMap.getOrElse(ns, "Unknown")) | wikiTypes.isEmpty) {
       // parse txt with json-wikipedia parser
       val a = new Article()
       a.setTitle(title)

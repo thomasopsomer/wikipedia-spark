@@ -36,7 +36,7 @@ object SparkApp {
     .getOrCreate()
 
   def run(params: Params) = {
-    
+
     // For implicit conversions like converting RDDs to DataFrames
     import spark.implicits._
 
@@ -99,7 +99,7 @@ object SparkApp {
         .action((x, c) => c.copy(lang = x))
 
       opt[Seq[String]]("types").valueName("<type1>,<type2>...")
-        .text("language of the dump")
+        .text("list of wikipedia types to keep, empty means keep all")
         .action((x, c) => c.copy(types = x))
 
       opt[Unit]("test")
