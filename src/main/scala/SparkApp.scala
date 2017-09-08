@@ -19,7 +19,8 @@ object SparkApp {
                      outputPath: String = null,
                      outputFormat: String = "parquet",
                      lang: String = "en",
-                     test: Boolean = false
+                     test: Boolean = false,
+                     types: Seq[String] = Seq()
                    )
 
   lazy val conf = new SparkConf()
@@ -35,7 +36,7 @@ object SparkApp {
     .getOrCreate()
 
   def run(params: Params) = {
-
+    
     // For implicit conversions like converting RDDs to DataFrames
     import spark.implicits._
 
@@ -59,10 +60,13 @@ object SparkApp {
     }
 
     // init our wikipedia parser
-    val parser = new Parser(lang=params.lang)
+    val parser = new Parser(lang=params.lang, wikiTypes=params.types)
 
     // parse the dump
-    val dumpDS: Dataset[WikiArticle] = dumpRdd.map(x => parser.parse(x._2.toString)).toDS()
+    val dumpDS: Dataset[WikiArticle] = dumpRdd
+        .map(x => parser.parse(x._2.toString).orNull)
+        .filter(x => x != null)
+      .toDS()
 
     // save as parquet or json
     params.outputFormat match {
@@ -93,6 +97,10 @@ object SparkApp {
       opt[String]("lang")
         .text("language of the dump")
         .action((x, c) => c.copy(lang = x))
+
+      opt[Seq[String]]("types").valueName("<type1>,<type2>...")
+        .text("language of the dump")
+        .action((x, c) => c.copy(types = x))
 
       opt[Unit]("test")
         .text("Flag to test on a few lines")

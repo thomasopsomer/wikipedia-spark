@@ -29,7 +29,7 @@ class MyArticle extends Article {
  * used in spark in a dataframe / dataset.
  */
 
-class Parser(lang:String = "en") extends Serializable {
+class Parser(lang:String = "en", wikiTypes: Seq[String] = Seq()) extends Serializable {
 
   @transient lazy val logger = LogManager.getLogger("SparkWikipediaParser.Parser")
 
@@ -58,63 +58,67 @@ class Parser(lang:String = "en") extends Serializable {
    * Parse a single xml as a string representing a wikipedia
    * article from the dump
    */
-  def parse(xmlStr: String) = {
+  def parse(xmlStr: String): Option[WikiArticle] = {
 
     val xml = XML.loadString(xmlStr)
-
 
     // parse title and ns in xml
     val title = (xml \\ "title").text
     val ns = (xml \\ "ns").text.toInt
     val text = (xml \\ "revision" \\ "text").text
 
-    // parse txt with json-wikipedia parser
-    val a = new Article()
-    a.setTitle(title)
-    a.setIntegerNamespace(ns)
-    a.setType(getType(ns))
+    if (wikiTypes.contains(typeMap.getOrElse(ns, "Unknown"))) {
+      // parse txt with json-wikipedia parser
+      val a = new Article()
+      a.setTitle(title)
+      a.setIntegerNamespace(ns)
+      a.setType(getType(ns))
 
-    try {
-      textParser.parse(a, text)
-    } catch {
-      case e: java.lang.StringIndexOutOfBoundsException =>
-        logger.warn(f"Got a StringIndexOutOfBoundsException on article $title")
+      try {
+        textParser.parse(a, text)
+      } catch {
+        case e: java.lang.StringIndexOutOfBoundsException =>
+          logger.warn(f"Got a StringIndexOutOfBoundsException on article $title")
+      }
+
+      // jointly get paragraph and links
+      val paralink = mapParagraphsLinks(a)
+
+      // check for wrong disambiguation which are instead Redirection
+      var finalType = getFinalTypeName(a)
+      val redirect = if (a.getRedirect == "") null else a.getRedirect
+      if (isWrongDisamb(paralink._2, finalType) && redirect != null) {
+        logger.info(
+          f"Setting 'Redirect' instead of 'Disambiguation' for article: $title because it has only one link")
+        finalType = "Redirect"
+      }
+
+      // check for article that are disambiguation
+      if (finalType == "Article" && articleIsDisamb(paralink._1)) {
+        logger.info(
+          f"Setting 'Redirect' Disambiguation of 'Article' for article: $title because of 'may refer to' parttern")
+        finalType = "Disambiguation"
+      }
+
+      // fill our wiki article obj :)
+      val wikiArticle = WikiArticle(
+        categories = mapLinks(Option(a.getCategories)),
+        externalLinks = mapLinks(Option(a.getExternalLinks)),
+        highlights = a.getHighlights.asScala.toList,
+        integerNamespace = ns,
+        lang = a.getLang,
+        links = paralink._2,
+        paragraphs = paralink._1,
+        redirect = redirect,
+        title = title,
+        wikiTitle = title.replace(" ", "_"),
+        `type` = finalType
+      )
+
+      Some(wikiArticle)
+    } else {
+      None
     }
-
-    // jointly get paragraph and links
-    val paralink = mapParagraphsLinks(a)
-
-    // check for wrong disambiguation which are instead Redirection
-    var finalType = getFinalTypeName(a)
-    val redirect = if (a.getRedirect == "") null else a.getRedirect
-    if (isWrongDisamb(paralink._2, finalType) && redirect != null) {
-      logger.info(
-        f"Setting 'Redirect' instead of 'Disambiguation' for article: $title because it has only one link")
-      finalType = "Redirect"
-    }
-
-    // check for article that are disambiguation
-    if (finalType == "Article" && articleIsDisamb(paralink._1)) {
-      logger.info(
-        f"Setting 'Redirect' Disambiguation of 'Article' for article: $title because of 'may refer to' parttern")
-      finalType = "Disambiguation"
-    }
-
-    // fill our wiki article obj :)
-    WikiArticle(
-      categories = mapLinks(Option(a.getCategories)),
-      externalLinks = mapLinks(Option(a.getExternalLinks)),
-      highlights = a.getHighlights.asScala.toList,
-      integerNamespace = ns,
-      lang = a.getLang,
-      links = paralink._2,
-      paragraphs = paralink._1,
-      redirect = redirect,
-      title = title,
-      wikiTitle = title.replace(" ", "_"),
-      `type` = finalType
-    )
-
   }
 
   /*
@@ -179,7 +183,7 @@ class Parser(lang:String = "en") extends Serializable {
     val t = a.getType
     t match {
       case Type.UNKNOWN => typeMap.getOrElse(a.getIntegerNamespace, "Unknown")
-      case Type.HELP => typeMap.getOrElse(a.getIntegerNamespace, "Unknown")
+      case Type.HELP => typeMap.getOrElse(a.getIntegerNamespace, "Help")
       case _ => a.getTypeName
     }
   }
